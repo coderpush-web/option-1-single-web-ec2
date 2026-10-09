@@ -1,0 +1,7 @@
+{
+  "Parameters": {
+    "EnvironmentName": "dev",
+    "InstanceType": "t3.micro",
+    "VolumeSize": "20"
+  }
+}

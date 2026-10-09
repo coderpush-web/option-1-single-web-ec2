@@ -1,0 +1,7 @@
+{
+  "Parameters": {
+    "EnvironmentName": "prod",
+    "InstanceType": "t3.small",
+    "VolumeSize": "30"
+  }
+}
