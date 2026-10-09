@@ -1,0 +1,110 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Option 1 Module: Single Web Application on EC2 (Imports common network & security modules)'
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: Production
+  InstanceType:
+    Type: String
+    Default: t3.small
+    AllowedValues: [t3.nano, t3.micro, t3.small, t3.medium]
+  LatestAmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+
+Resources:
+  WebServerInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceType
+      ImageId: !Ref LatestAmiId
+      IamInstanceProfile:
+        Fn::ImportValue: !Sub '${EnvironmentName}-EC2InstanceProfileName'
+      SubnetId:
+        Fn::ImportValue: !Sub '${EnvironmentName}-PublicSubnetId'
+      SecurityGroupIds:
+        - Fn::ImportValue: !Sub '${EnvironmentName}-WebSecurityGroupId'
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 30
+            VolumeType: gp3
+            DeleteOnTermination: true
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          dnf update -y
+          dnf install -y nodejs npm
+
+          mkdir -p /opt/app
+          cat << 'EOF' > /opt/app/package.json
+          {
+            "name": "sample-web-app",
+            "version": "1.0.0",
+            "main": "server.js",
+            "dependencies": {
+              "express": "^4.19.2",
+              "mysql2": "^3.9.7"
+            }
+          }
+          EOF
+
+          cat << 'EOF' > /opt/app/server.js
+          const express = require('express');
+          const app = express();
+          const port = 80;
+          app.get('/health', (req, res) => res.json({ status: 'ok' }));
+          app.get('/', (req, res) => {
+            res.send(`
+              <!DOCTYPE html><html><body style="font-family:sans-serif;background:#f4f6f8;padding:40px;">
+              <div style="background:white;padding:24px;border-radius:8px;max-width:550px;margin:0 auto;box-shadow:0 4px 6px rgba(0,0,0,0.1)">
+                <h1 style="color:#ff9900;">🚀 Option 1: Single Web EC2</h1>
+                <p>Status: Running Standalone</p>
+                <p>Hostname: ${require('os').hostname()}</p>
+                <p>Platform: Node.js ${process.version}</p>
+              </div></body></html>
+            `);
+          });
+          app.listen(port, () => console.log('Listening on port ' + port));
+          EOF
+
+          cd /opt/app
+          npm install
+
+          cat << 'EOF' > /etc/systemd/system/webapp.service
+          [Unit]
+          Description=Web App Service
+          After=network.target
+
+          [Service]
+          Type=simple
+          User=root
+          WorkingDirectory=/opt/app
+          ExecStart=/usr/bin/node /opt/app/server.js
+          Restart=always
+
+          [Install]
+          WantedBy=multi-user.target
+          EOF
+
+          systemctl daemon-reload
+          systemctl enable webapp
+          systemctl start webapp
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-Option1-WebServer'
+
+  WebServerEIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      InstanceId: !Ref WebServerInstance
+
+Outputs:
+  WebsiteURL:
+    Description: Website URL
+    Value: !Sub 'http://${WebServerEIP.PublicIp}'
+  PublicIP:
+    Description: Elastic IP of Web Server
+    Value: !Ref WebServerEIP
