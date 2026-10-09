@@ -1,12 +1,12 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'Application Compute Module: Option 1 - Single Web EC2'
+Description: 'Application Compute Module: Option 1 - Single Web EC2 running Docker container from ECR'
 
 Parameters:
   EnvironmentName:
     Type: String
     Default: dev
     AllowedValues: [dev, prod]
-    Description: Environment (dev uses smaller/spot instance, prod uses standard/reserved)
+    Description: Environment stage (dev uses smaller instance, prod uses standard)
 
   InstanceType:
     Type: String
@@ -16,11 +16,26 @@ Parameters:
   VolumeSize:
     Type: Number
     Default: 20
-    Description: Root EBS gp3 Volume Size in GB (20GB for dev, 30GB for prod)
+    Description: Root EBS gp3 Volume Size in GB
 
   LatestAmiId:
     Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
     Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+
+  ImageTag:
+    Type: String
+    Default: latest
+    Description: Docker image tag deployed from ECR
+
+  DomainName:
+    Type: String
+    Default: png261.dev
+    Description: Root domain name
+
+  SubdomainName:
+    Type: String
+    Default: opt1-dev.png261.dev
+    Description: Subdomain for this environment (e.g. opt1-dev.png261.dev or opt1.png261.dev)
 
 Resources:
   WebServerInstance:
@@ -41,67 +56,46 @@ Resources:
             VolumeType: gp3
             DeleteOnTermination: true
       UserData:
-        Fn::Base64: !Sub
-          - |
-            #!/bin/bash
-            dnf update -y
-            dnf install -y nodejs npm
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -e
+          dnf update -y
+          dnf install -y docker aws-cli
+          systemctl enable docker
+          systemctl start docker
+          usermod -aG docker ec2-user
 
-            mkdir -p /opt/app
-            cat << 'EOF' > /opt/app/package.json
-            {
-              "name": "sample-web-app",
-              "version": "1.0.0",
-              "main": "server.js",
-              "dependencies": {
-                "express": "^4.19.2",
-                "mysql2": "^3.9.7"
-              }
-            }
-            EOF
+          AWS_REGION="${AWS::Region}"
+          ACCOUNT_ID="${AWS::AccountId}"
+          IMAGE_URI="${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${EnvironmentName}-option-1-web-app:${ImageTag}"
 
-            cat << 'EOF' > /opt/app/server.js
-            const express = require('express');
-            const app = express();
-            const port = 80;
-            app.get('/health', (req, res) => res.json({ status: 'ok', env: '${EnvTag}' }));
-            app.get('/', (req, res) => {
-              res.send(`
-                <!DOCTYPE html><html><body style="font-family:sans-serif;background:#f4f6f8;padding:40px;">
-                <div style="background:white;padding:24px;border-radius:8px;max-width:550px;margin:0 auto;box-shadow:0 4px 6px rgba(0,0,0,0.1)">
-                  <h1 style="color:#ff9900;">🚀 Option 1: Single Web EC2 (${EnvTag})</h1>
-                  <p>Environment: <strong>${EnvTag}</strong></p>
-                  <p>Hostname: ${!osHostname}</p>
-                </div></body></html>
-              `);
-            });
-            app.listen(port, () => console.log('Listening on port ' + port));
-            EOF
+          echo "Logging into Amazon ECR..."
+          aws ecr get-login-password --region "${AWS::Region}" | docker login --username AWS --password-stdin "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com" || true
 
-            cd /opt/app
-            npm install
+          echo "Pulling Docker image: $IMAGE_URI"
+          docker pull "$IMAGE_URI" || true
 
-            cat << 'EOF' > /etc/systemd/system/webapp.service
-            [Unit]
-            Description=Web App Service
-            After=network.target
+          cat << 'SVC' > /etc/systemd/system/react-webapp.service
+          [Unit]
+          Description=Dockerized React Web App
+          After=docker.service
+          Requires=docker.service
 
-            [Service]
-            Type=simple
-            User=root
-            WorkingDirectory=/opt/app
-            ExecStart=/usr/bin/node /opt/app/server.js
-            Restart=always
+          [Service]
+          TimeoutStartSec=0
+          Restart=always
+          ExecStartPre=-/usr/bin/docker stop react-webapp
+          ExecStartPre=-/usr/bin/docker rm react-webapp
+          ExecStart=/usr/bin/docker run --name react-webapp -p 80:80 -e APP_ENV=${EnvironmentName} -e PORT=80 ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${EnvironmentName}-option-1-web-app:${ImageTag}
+          ExecStop=/usr/bin/docker stop react-webapp
 
-            [Install]
-            WantedBy=multi-user.target
-            EOF
+          [Install]
+          WantedBy=multi-user.target
+          SVC
 
-            systemctl daemon-reload
-            systemctl enable webapp
-            systemctl start webapp
-          - EnvTag: !Ref EnvironmentName
-            osHostname: "${require('os').hostname()}"
+          systemctl daemon-reload
+          systemctl enable react-webapp
+          systemctl start react-webapp || true
       Tags:
         - Key: Name
           Value: !Sub '${EnvironmentName}-web-server'
@@ -125,4 +119,19 @@ Outputs:
     Value: !Sub 'http://${WebServerEIP.PublicIp}'
   PublicIP:
     Description: Elastic IP
+    Value: !Ref WebServerEIP
+  CustomDomainURL:
+    Description: Custom Domain Website URL (png261.dev)
+    Value: !Sub 'https://${SubdomainName}'
+  RootDomain:
+    Description: Root Domain Name
+    Value: !Ref DomainName
+  DnsRecordType:
+    Description: DNS Record Type for Cloudflare / Route 53
+    Value: 'A'
+  DnsRecordName:
+    Description: DNS Record Name
+    Value: !Ref SubdomainName
+  DnsRecordValue:
+    Description: DNS Record Value (IPv4 Target)
     Value: !Ref WebServerEIP
