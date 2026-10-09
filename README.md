@@ -42,6 +42,17 @@ No costed resources detected.
 ## 3. Kiến trúc Hạ tầng (Architecture Diagram)
 ![Architecture](infra/architecture_diagram.png)
 
+
+## 📸 Giao Diện Ứng Dụng Thực Tế (Live Screenshots - Dev & Prod)
+
+| Môi trường Development (`opt1-dev.png261.dev`) | Môi trường Production (`opt1.png261.dev`) |
+| :---: | :---: |
+| ![Development Environment](screenshots/dev_screenshot.png) | ![Production Environment](screenshots/prod_screenshot.png) |
+
+> 🚀 **Ghi chú triển khai:**
+> - **Môi trường Dev (`opt1-dev.png261.dev`):** Chạy chế độ debug/development, kết nối cơ sở dữ liệu Dev, phục vụ kiểm thử tính năng mới.
+> - **Môi trường Prod (`opt1.png261.dev`):** Chạy chế độ production tối ưu hóa hiệu năng cao, bảo mật nghiêm ngặt qua Cloudflare SSL/HTTPS.
+
 ## 4. Quy trình CI/CD & Branching Strategy
 - **dev**: Nhánh phát triển chính (Default branch). Tự động chạy test & lint template CloudFormation.
 - **main**: Nhánh Production được bảo vệ (**Branch Protection Rule**). Chỉ cho phép merge từ nhánh **dev**.
