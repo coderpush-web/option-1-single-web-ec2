@@ -9,13 +9,24 @@ Diagram:
       Direction: vertical
       Children:
         - AWSCloud
+        - CloudFront
         - CloudflareEdge
         - User
+
+    User:
+      Type: AWS::Diagram::Resource
+      Preset: User
+      Title: "User"
 
     CloudflareEdge:
       Type: AWS::Diagram::Resource
       Preset: Internet
       Title: "Cloudflare Proxy (CDN/WAF)\nopt1.png261.dev"
+
+    CloudFront:
+      Type: AWS::Diagram::Resource
+      Preset: "Amazon CloudFront"
+      Title: "Amazon CloudFront\n(Static Cache & Edge)"
 
     AWSCloud:
       Type: AWS::Diagram::Cloud
@@ -30,31 +41,40 @@ Diagram:
       Title: "VPC (10.0.0.0/16)"
       Direction: vertical
       Children:
+        - PrivateSubnets
         - PublicSubnet
       BorderChildren:
         - Position: S
           Resource: IGW
-
-    PublicSubnet:
-      Type: AWS::EC2::Subnet
-      Preset: PublicSubnet
-      Title: "Public Subnet (10.0.1.0/24)"
-      Children:
-        - WebInstance
-
-    WebInstance:
-      Type: AWS::EC2::Instance
-      Title: "Next.js Web Instance\n(Docker on t3.micro)"
 
     IGW:
       Type: AWS::EC2::InternetGateway
       IconFill:
         Type: rect
 
-    User:
-      Type: AWS::Diagram::Resource
-      Preset: User
-      Title: "User"
+    PublicSubnet:
+      Type: AWS::EC2::Subnet
+      Preset: PublicSubnet
+      Title: "Public Subnets (AZ1 & AZ2)"
+      Children:
+        - ALB
+
+    ALB:
+      Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+      Preset: "Application Load Balancer"
+      Title: "Application Load Balancer"
+
+    PrivateSubnets:
+      Type: AWS::EC2::Subnet
+      Preset: PrivateSubnet
+      Title: "Private Subnets (AZ1 & AZ2)"
+      Children:
+        - WebASG
+
+    WebASG:
+      Type: AWS::AutoScaling::AutoScalingGroup
+      Preset: "AWS::AutoScaling::AutoScalingGroup"
+      Title: "Web Auto Scaling Group\n(Docker on EC2)"
 
   Links:
     - Source: User
@@ -69,6 +89,16 @@ Diagram:
           Title: "HTTPS:443"
     - Source: CloudflareEdge
       SourcePosition: N
+      Target: CloudFront
+      TargetPosition: S
+      TargetArrowHead:
+        Type: Open
+      Type: orthogonal
+      Labels:
+        SourceLeft:
+          Title: "HTTPS:443"
+    - Source: CloudFront
+      SourcePosition: N
       Target: IGW
       TargetPosition: S
       TargetArrowHead:
@@ -79,8 +109,18 @@ Diagram:
           Title: "HTTP:80"
     - Source: IGW
       SourcePosition: N
-      Target: WebInstance
+      Target: ALB
       TargetPosition: S
       TargetArrowHead:
         Type: Open
       Type: orthogonal
+    - Source: ALB
+      SourcePosition: N
+      Target: WebASG
+      TargetPosition: S
+      TargetArrowHead:
+        Type: Open
+      Type: orthogonal
+      Labels:
+        SourceLeft:
+          Title: "HTTP:80"
