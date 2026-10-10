@@ -9,3 +9,9 @@ out/
 build/
 *.tsbuildinfo
 next-env.d.ts
+
+# DevSecOps - Generated files & caches (awslabs standard)
+.ash/
+ash_output/
+ferret-sast-report.json
+.eslintcache

@@ -177,10 +177,10 @@ export async function fetchInvoiceById(id: string) {
       console.log('Fallback to mock invoice by id');
     }
   }
-  const found = mockInvoices.find((i) => i.id === id);
+  const found = mockInvoices.find((i: any) => i.id === id);
   if (!found) return null;
   return {
-    id: found.id || 'inv-id',
+    id: (found as any).id || id || 'inv-id',
     customer_id: found.customer_id,
     amount: found.amount / 100,
     status: found.status,

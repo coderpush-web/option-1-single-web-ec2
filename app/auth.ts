@@ -4,7 +4,6 @@ import bcrypt from 'bcrypt';
 import { z } from 'zod';
 import type { User } from '@/app/lib/definitions';
 import { authConfig } from './auth.config';
-import { users as placeholderUsers } from '@/app/lib/placeholder-data';
 import { sqlClient } from '@/app/lib/db';
 
 async function getUser(email: string): Promise<User | undefined> {
@@ -14,18 +13,23 @@ async function getUser(email: string): Promise<User | undefined> {
       if (user && user.length > 0) return user[0];
     }
   } catch (error) {
-    // Database might be connecting or offline, fallback to placeholder
+    console.error('Database query error in getUser:', error);
   }
 
-  const found = placeholderUsers.find((u) => u.email === email);
-  if (found) {
+  // In stateless mode without a database, authenticate demo user only if configured securely via environment
+  if (
+    process.env.DEMO_USER_EMAIL &&
+    process.env.DEMO_USER_PASSWORD &&
+    email.toLowerCase() === process.env.DEMO_USER_EMAIL.toLowerCase()
+  ) {
     return {
-      id: found.id,
-      name: found.name,
-      email: found.email,
-      password: await bcrypt.hash(found.password, 10),
+      id: '410544b2-4001-4271-9855-fec4b6a6442a',
+      name: 'Demo User',
+      email: process.env.DEMO_USER_EMAIL,
+      password: await bcrypt.hash(process.env.DEMO_USER_PASSWORD, 10),
     };
   }
+
   return undefined;
 }
 
