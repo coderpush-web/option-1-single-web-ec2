@@ -58,11 +58,16 @@ Diagram:
       Title: "Public Subnets (AZ1 & AZ2)"
       Children:
         - ALB
+        - NATGW
 
     ALB:
       Type: AWS::ElasticLoadBalancingV2::LoadBalancer
       Preset: "Application Load Balancer"
       Title: "Application Load Balancer"
+
+    NATGW:
+      Type: AWS::EC2::NatGateway
+      Title: "NAT Gateway (Egress)"
 
     PrivateSubnets:
       Type: AWS::EC2::Subnet
@@ -124,3 +129,13 @@ Diagram:
       Labels:
         SourceLeft:
           Title: "HTTP:80"
+    - Source: WebASG
+      SourcePosition: E
+      Target: NATGW
+      TargetPosition: E
+      TargetArrowHead:
+        Type: Open
+      Type: orthogonal
+      Labels:
+        SourceRight:
+          Title: "Egress"

@@ -80,7 +80,7 @@ Resources:
         - Fn::ImportValue: !Sub '${EnvironmentName}-PublicSubnetId'
         - Fn::ImportValue: !Sub '${EnvironmentName}-PublicSubnet2Id'
       SecurityGroups:
-        - Fn::ImportValue: !Sub '${EnvironmentName}-WebSecurityGroupId'
+        - Fn::ImportValue: !Sub '${EnvironmentName}-ALBSecurityGroupId'
       Tags:
         - Key: Name
           Value: !Sub '${EnvironmentName}-opt1-alb'
@@ -105,6 +105,9 @@ Resources:
       UnhealthyThresholdCount: 3
       Matcher:
         HttpCode: 200-399
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: '30'
       Tags:
         - Key: Name
           Value: !Sub '${EnvironmentName}-opt1-tg'
@@ -212,7 +215,13 @@ Resources:
             Restart=always
             ExecStartPre=-/usr/bin/docker stop react-webapp
             ExecStartPre=-/usr/bin/docker rm react-webapp
-            ExecStart=/usr/bin/docker run --name react-webapp -p 80:80 -e APP_ENV=${EnvironmentName} -e PORT=80 ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${EnvironmentName}-option-1-web-app:${ImageTag}
+            ExecStart=/usr/bin/docker run --name react-webapp -p 80:80 \
+              --log-driver=awslogs \
+              --log-opt awslogs-region=${AWS::Region} \
+              --log-opt awslogs-group=/aws/ec2/${EnvironmentName}-option-1-webapp \
+              --log-opt awslogs-create-group=true \
+              -e APP_ENV=${EnvironmentName} -e PORT=80 \
+              ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${EnvironmentName}-option-1-web-app:${ImageTag}
             ExecStop=/usr/bin/docker stop react-webapp
 
             [Install]
@@ -232,6 +241,11 @@ Resources:
 
   WebAutoScalingGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
+    UpdatePolicy:
+      AutoScalingRollingUpdate:
+        MinInstancesInService: 1
+        MaxBatchSize: 1
+        PauseTime: PT3M
     Properties:
       AutoScalingGroupName: !Sub '${EnvironmentName}-opt1-asg'
       LaunchTemplate:
