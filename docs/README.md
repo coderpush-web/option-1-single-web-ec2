@@ -12,7 +12,7 @@ This `docs/` folder provides comprehensive guides covering architecture, infrast
    - Prerequisites & Required Tools
    - Environment Configuration (`dev.json` & `prod.json`)
    - Automated CI/CD Pipeline (GitHub Actions)
-   - Manual Deployment via AWS CLI & `deploy.sh`
+   - Manual Deployment via AWS CLI & CloudFormation
    - Custom Domain & DNS Mapping (`png261.dev`)
    - Zero-Downtime Rolling Update (ASG Instance Refresh)
    - Infrastructure Teardown & Resource Cleanup
@@ -68,6 +68,5 @@ npm run dev
 ### 2. Deploy Infrastructure to Development Environment
 ```bash
 cd infra
-chmod +x deploy.sh
-./deploy.sh dev
+Deploy via GitHub Actions (workflow_dispatch) or directly via AWS CLI
 ```

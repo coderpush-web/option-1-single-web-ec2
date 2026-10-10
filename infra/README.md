@@ -12,11 +12,7 @@ This directory contains standalone AWS CloudFormation modules supporting both **
 - `environments/dev.json`: Cost-optimized parameters for Development (t3.micro, 1–2 instances, smaller EBS volume).
 - `environments/prod.json`: High-availability & performance configuration for Production (t3.small/medium, 2–6 instances Multi-AZ, 30GB EBS).
 
-## 3. Deployment Commands
-```bash
-# Deploy to Development:
-./deploy.sh dev
-
-# Deploy to Production:
-./deploy.sh prod
-```
+## 3. Automated CI/CD Deployment
+Deployments are fully automated via GitHub Actions (`.github/workflows/deploy.yml`):
+- **Production (`prod`)**: Automatically deploys when image build & push completes on `main`.
+- **Manual Trigger (`workflow_dispatch`)**: Can be dispatched anytime from the GitHub Actions tab targeting `dev` or `prod`.
