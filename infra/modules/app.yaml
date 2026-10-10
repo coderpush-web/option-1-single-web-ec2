@@ -57,17 +57,8 @@ Parameters:
     Default: 'arn:aws:acm:ap-southeast-1:649519997247:certificate/3565f62c-9fd6-4aec-bb6a-5182e3337479'
     Description: ACM Certificate ARN for HTTPS ALB listener (*.png261.dev)
 
-  CloudflareOriginSecret:
-    Type: String
-    Default: ''
-    NoEcho: true
-    Description: Optional secret header value (X-Origin-Secret) to restrict ALB access only to Cloudflare proxy
-
 Conditions:
   HasCertificateArn: !Not [!Equals [!Ref CertificateArn, '']]
-  HasCloudflareSecret: !And
-    - !Condition HasCertificateArn
-    - !Not [!Equals [!Ref CloudflareOriginSecret, '']]
 
 Resources:
   AppECRRepository:
@@ -165,29 +156,6 @@ Resources:
       Certificates:
         - CertificateArn: !Ref CertificateArn
       DefaultActions:
-        !If
-          - HasCloudflareSecret
-          - - Type: fixed-response
-              FixedResponseConfig:
-                ContentType: text/plain
-                MessageBody: 'Direct origin access forbidden. Requests must route via Cloudflare proxy.'
-                StatusCode: '403'
-          - - Type: forward
-              TargetGroupArn: !Ref ALBTargetGroup
-
-  ALBCloudflareRule:
-    Type: AWS::ElasticLoadBalancingV2::ListenerRule
-    Condition: HasCloudflareSecret
-    Properties:
-      ListenerArn: !Ref ALBHttpsListener
-      Priority: 1
-      Conditions:
-        - Field: http-header
-          HttpHeaderConfig:
-            HttpHeaderName: X-Origin-Secret
-            Values:
-              - !Ref CloudflareOriginSecret
-      Actions:
         - Type: forward
           TargetGroupArn: !Ref ALBTargetGroup
 
@@ -218,7 +186,6 @@ Resources:
           Fn::Base64: !Sub |
             #!/bin/bash
             set -e
-            dnf update -y
             dnf install -y docker aws-cli
             systemctl enable docker
             systemctl start docker
@@ -405,7 +372,7 @@ Outputs:
     Description: Root Domain Name
     Value: !Ref DomainName
   DnsRecordType:
-    Description: DNS Record Type for Cloudflare / Route 53
+    Description: DNS Record Type
     Value: 'CNAME'
   DnsRecordName:
     Description: DNS Record Name
@@ -413,6 +380,6 @@ Outputs:
   DnsRecordValue:
     Description: DNS Record Value (CloudFront Distribution Target)
     Value: !GetAtt CloudFrontDistribution.DomainName
-  CloudflareProxyGuide:
-    Description: Cloudflare Setup Instructions
-    Value: !Sub 'Add CNAME in Cloudflare: ${SubdomainName} -> ${CloudFrontDistribution.DomainName} (or ALB DNS ${ApplicationLoadBalancer.DNSName}) with SSL/TLS Full.'
+  DNSSetupGuide:
+    Description: Custom Domain DNS Setup Instructions
+    Value: !Sub 'Add CNAME in DNS: ${SubdomainName} -> ${CloudFrontDistribution.DomainName} (DNS-only / no proxy).'
