@@ -27,11 +27,6 @@ Parameters:
     Default: latest
     Description: Docker image tag deployed from ECR
 
-  DomainName:
-    Type: String
-    Default: png261.dev
-    Description: Root domain name
-
   SubdomainName:
     Type: String
     Default: opt1-dev.png261.dev
@@ -366,11 +361,8 @@ Outputs:
     Description: Direct Application Load Balancer URL
     Value: !Sub 'http://${ApplicationLoadBalancer.DNSName}'
   CustomDomainURL:
-    Description: Custom Domain Website URL (png261.dev)
+    Description: Custom Domain Website URL
     Value: !Sub 'https://${SubdomainName}'
-  RootDomain:
-    Description: Root Domain Name
-    Value: !Ref DomainName
   DnsRecordType:
     Description: DNS Record Type
     Value: 'CNAME'

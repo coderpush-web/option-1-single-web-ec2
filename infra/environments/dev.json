@@ -6,7 +6,6 @@
     "MinInstances": "1",
     "MaxInstances": "2",
     "DesiredInstances": "1",
-    "DomainName": "png261.dev",
     "SubdomainName": "opt1-dev.png261.dev"
   }
 }
