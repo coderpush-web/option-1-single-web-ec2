@@ -70,6 +70,36 @@ Conditions:
     - !Not [!Equals [!Ref CloudflareOriginSecret, '']]
 
 Resources:
+  AppECRRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub '${EnvironmentName}-option-1-web-app'
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {
+            "rules": [
+              {
+                "rulePriority": 1,
+                "description": "Keep last 5 images",
+                "selection": {
+                  "tagStatus": "any",
+                  "countType": "imageCountMoreThan",
+                  "countNumber": 5
+                },
+                "action": {
+                  "type": "expire"
+                }
+              }
+            ]
+          }
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-option-1-ecr'
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
   ApplicationLoadBalancer:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
@@ -199,10 +229,14 @@ Resources:
             IMAGE_URI="${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${EnvironmentName}-option-1-web-app:${ImageTag}"
 
             echo "Logging into Amazon ECR..."
-            aws ecr get-login-password --region "${AWS::Region}" | docker login --username AWS --password-stdin "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com" || true
+            for i in {1..5}; do
+              aws ecr get-login-password --region "${AWS::Region}" | docker login --username AWS --password-stdin "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com" && break || sleep 5
+            done
 
             echo "Pulling Docker image: $IMAGE_URI"
-            docker pull "$IMAGE_URI" || true
+            for i in {1..5}; do
+              docker pull "$IMAGE_URI" && break || sleep 5
+            done
 
             cat << 'SVC' > /etc/systemd/system/react-webapp.service
             [Unit]
@@ -358,6 +392,9 @@ Outputs:
   LoadBalancerDNS:
     Description: Application Load Balancer DNS Name
     Value: !GetAtt ApplicationLoadBalancer.DNSName
+  ECRRepositoryUri:
+    Description: ECR Repository URI
+    Value: !GetAtt AppECRRepository.RepositoryUri
   LoadBalancerURL:
     Description: Direct Application Load Balancer URL
     Value: !Sub 'http://${ApplicationLoadBalancer.DNSName}'
