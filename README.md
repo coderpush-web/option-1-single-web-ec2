@@ -34,7 +34,7 @@ Hạ tầng và Mã nguồn ứng dụng độc lập cho **Option 1: Auto Scali
 
 <!-- INFRACOST_START -->
 ### 💵 Kết quả Kiểm tra Chi phí Tự động CloudFormation (Infracost CI/CD Output)
-*Thời gian kiểm tra: Sat Oct 10 07:07:05 UTC 2026*
+*Thời gian kiểm tra: Sat Oct 10 09:30:44 UTC 2026*
 
 ```text
 No costed resources detected.
