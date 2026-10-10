@@ -22,7 +22,6 @@ All infrastructure code resides under the `infra/` directory:
 
 ```text
 infra/
-├── cloudformation.yaml      # Consolidated single-file CloudFormation template
 ├── deploy.sh                # Automated multi-stack deployment script
 ├── environments/
 │   ├── dev.json             # Environment parameters for Development
@@ -54,22 +53,24 @@ Configuration files are located in `infra/environments/dev.json` and `infra/envi
 
 ## 4. Automated Deployment via GitHub Actions (CI/CD)
 
-The repository includes a production-ready CI/CD pipeline defined in `.github/workflows/ci-cd.yml`.
+The repository features a modular CI/CD pipeline split into 4 focused GitHub Actions workflows:
+- `.github/workflows/ci-app.yml`: Application testing and validation (`test/test_api.js`).
+- `.github/workflows/ci-infra.yml`: Infrastructure validation and linting (`cfn-lint`).
+- `.github/workflows/build-ecr.yml`: Builds Docker container image and pushes to Amazon ECR.
+- `.github/workflows/deploy.yml`: Deploys CloudFormation stacks and triggers instance refresh.
 
 ### Required GitHub Repository Secrets:
 Navigate to **Settings** -> **Secrets and variables** -> **Actions** and add:
 - `AWS_ACCESS_KEY_ID`: IAM user/role access key ID.
 - `AWS_SECRET_ACCESS_KEY`: IAM user/role secret access key.
 - `AWS_REGION`: AWS Region (default: `ap-southeast-1`).
-- `INFRACOST_API_KEY`: *(Optional)* API key for automated Infracost cost scanning.
 
 ### Branching & Deployment Workflow:
 1. **`dev` Branch (Feature & Development):**
    - Triggers on push / PR to `dev`.
    - Runs unit tests (`test/test_api.js`) and lints CloudFormation templates (`cfn-lint`).
    - Builds the Next.js Docker image and pushes it to Amazon ECR tagged as `dev-latest`.
-   - Runs Infracost to audit infrastructure expenses.
-2. **`main` Branch (Production Delivery):**
+   2. **`main` Branch (Production Delivery):**
    - Protected branch (**Branch Protection Rules** require PR and approval from `dev`).
    - Builds the production image and pushes to ECR tagged as `latest`.
    - Executes `deploy.sh prod latest` to update CloudFormation stacks.

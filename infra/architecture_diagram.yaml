@@ -10,7 +10,6 @@ Diagram:
       Children:
         - AWSCloud
         - CloudFront
-        - DNS
         - User
 
     User:
@@ -18,15 +17,10 @@ Diagram:
       Preset: User
       Title: "User"
 
-    DNS:
-      Type: AWS::Diagram::Resource
-      Preset: Internet
-      Title: "Custom Domain DNS\nopt1.png261.dev"
-
     CloudFront:
       Type: AWS::Diagram::Resource
       Preset: "Amazon CloudFront"
-      Title: "Amazon CloudFront\n(Static Cache & Edge)"
+      Title: "Amazon CloudFront"
 
     AWSCloud:
       Type: AWS::Diagram::Cloud
@@ -41,22 +35,22 @@ Diagram:
 
     ECR:
       Type: AWS::ECR
-      Title: "Amazon ECR\n(App Image Repository)"
+      Title: "Amazon ECR"
 
     CloudWatch:
       Type: AWS::CloudWatch
-      Title: "Amazon CloudWatch\n(Logs & Alarms)"
+      Title: "Amazon CloudWatch"
 
     SNS:
       Type: AWS::SNS::Topic
-      Title: "Amazon SNS\n(Ops Alerts)"
+      Title: "Amazon SNS"
 
     VPC:
       Type: AWS::EC2::VPC
-      Title: "VPC (10.0.0.0/16)"
+      Title: "VPC"
       Direction: vertical
       Children:
-        - PrivateSubnets
+        - PrivateSubnet
         - PublicSubnet
       BorderChildren:
         - Position: S
@@ -70,53 +64,35 @@ Diagram:
     PublicSubnet:
       Type: AWS::EC2::Subnet
       Preset: PublicSubnet
-      Title: "Public Subnets (AZ1 & AZ2)"
+      Title: "Public Subnet"
       Children:
         - ALB
 
     ALB:
       Type: AWS::ElasticLoadBalancingV2::LoadBalancer
       Preset: "Application Load Balancer"
-      Title: "Application Load Balancer\n(/api/health)"
+      Title: "Application Load Balancer"
 
-    PrivateSubnets:
+    PrivateSubnet:
       Type: AWS::EC2::Subnet
       Preset: PrivateSubnet
-      Title: "Private Subnets (AZ1 & AZ2)"
+      Title: "Private Subnet"
       Children:
         - WebASG
-        - VPCEndpoints
 
     WebASG:
       Type: AWS::AutoScaling::AutoScalingGroup
       Preset: "AWS::AutoScaling::AutoScalingGroup"
-      Title: "Web Auto Scaling Group\n(Docker on EC2)"
-
-    VPCEndpoints:
-      Type: AWS::EC2::VPCEndpoint
-      Title: "AWS PrivateLink\n(Single-AZ ECR & S3)"
+      Title: "Auto Scaling Group"
 
   Links:
     - Source: User
-      SourcePosition: N
-      Target: DNS
-      TargetPosition: S
-      TargetArrowHead:
-        Type: Open
-      Type: orthogonal
-      Labels:
-        SourceLeft:
-          Title: "HTTPS:443"
-    - Source: DNS
       SourcePosition: N
       Target: CloudFront
       TargetPosition: S
       TargetArrowHead:
         Type: Open
       Type: orthogonal
-      Labels:
-        SourceLeft:
-          Title: "CNAME"
     - Source: CloudFront
       SourcePosition: N
       Target: IGW
@@ -124,9 +100,6 @@ Diagram:
       TargetArrowHead:
         Type: Open
       Type: orthogonal
-      Labels:
-        SourceLeft:
-          Title: "HTTP:80"
     - Source: IGW
       SourcePosition: N
       Target: ALB
@@ -141,29 +114,13 @@ Diagram:
       TargetArrowHead:
         Type: Open
       Type: orthogonal
-      Labels:
-        SourceLeft:
-          Title: "HTTP:80"
     - Source: WebASG
-      SourcePosition: E
-      Target: VPCEndpoints
-      TargetPosition: W
-      TargetArrowHead:
-        Type: Open
-      Type: orthogonal
-      Labels:
-        SourceRight:
-          Title: "PrivateLink"
-    - Source: VPCEndpoints
       SourcePosition: E
       Target: ECR
       TargetPosition: W
       TargetArrowHead:
         Type: Open
       Type: orthogonal
-      Labels:
-        SourceRight:
-          Title: "Pull Image"
     - Source: WebASG
       SourcePosition: E
       Target: CloudWatch
@@ -171,9 +128,6 @@ Diagram:
       TargetArrowHead:
         Type: Open
       Type: orthogonal
-      Labels:
-        SourceRight:
-          Title: "Logs & Alarms"
     - Source: CloudWatch
       SourcePosition: E
       Target: SNS
@@ -181,6 +135,3 @@ Diagram:
       TargetArrowHead:
         Type: Open
       Type: orthogonal
-      Labels:
-        SourceRight:
-          Title: "Notify"
