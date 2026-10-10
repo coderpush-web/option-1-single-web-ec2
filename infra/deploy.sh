@@ -75,6 +75,14 @@ aws cloudformation deploy \
   --no-fail-on-empty-changeset \
   --region "$REGION"
 
+# 5. Kích hoạt Zero-Downtime Instance Refresh cho Auto Scaling Group
+echo "5. Kích hoạt Zero-Downtime Instance Refresh ($ENV-opt1-asg)..."
+ASG_NAME="$ENV-opt1-asg"
+aws autoscaling start-instance-refresh \
+  --auto-scaling-group-name "$ASG_NAME" \
+  --preferences '{"MinHealthyPercentage": 50, "InstanceWarmup": 180}' \
+  --region "$REGION" 2>/dev/null || echo "Instance refresh already in progress or not applicable."
+
 echo ""
 echo "=== CloudFormation Stack Outputs ==="
 aws cloudformation describe-stacks \
