@@ -3,6 +3,9 @@
     "EnvironmentName": "prod",
     "InstanceType": "t3.small",
     "VolumeSize": "30",
+    "MinInstances": "2",
+    "MaxInstances": "6",
+    "DesiredInstances": "2",
     "DomainName": "png261.dev",
     "SubdomainName": "opt1.png261.dev"
   }

@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'Application Compute Module: Option 1 - Single Web EC2 running Docker container from ECR'
+Description: 'Application Compute Module: Option 1 - Auto Scaling EC2 Web (ALB + ASG) in Private Subnets with CloudFront Edge Caching'
 
 Parameters:
   EnvironmentName:
@@ -37,94 +37,316 @@ Parameters:
     Default: opt1-dev.png261.dev
     Description: Subdomain for this environment (e.g. opt1-dev.png261.dev or opt1.png261.dev)
 
+  MinInstances:
+    Type: Number
+    Default: 1
+    Description: Minimum instances in Auto Scaling Group
+
+  MaxInstances:
+    Type: Number
+    Default: 4
+    Description: Maximum instances in Auto Scaling Group
+
+  DesiredInstances:
+    Type: Number
+    Default: 1
+    Description: Desired instances in Auto Scaling Group
+
+  CertificateArn:
+    Type: String
+    Default: 'arn:aws:acm:ap-southeast-1:649519997247:certificate/3565f62c-9fd6-4aec-bb6a-5182e3337479'
+    Description: ACM Certificate ARN for HTTPS ALB listener (*.png261.dev)
+
+  CloudflareOriginSecret:
+    Type: String
+    Default: ''
+    NoEcho: true
+    Description: Optional secret header value (X-Origin-Secret) to restrict ALB access only to Cloudflare proxy
+
+Conditions:
+  HasCertificateArn: !Not [!Equals [!Ref CertificateArn, '']]
+  HasCloudflareSecret: !And
+    - !Condition HasCertificateArn
+    - !Not [!Equals [!Ref CloudflareOriginSecret, '']]
+
 Resources:
-  WebServerInstance:
-    Type: AWS::EC2::Instance
+  ApplicationLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
-      InstanceType: !Ref InstanceType
-      ImageId: !Ref LatestAmiId
-      IamInstanceProfile:
-        Fn::ImportValue: !Sub '${EnvironmentName}-EC2InstanceProfileName'
-      SubnetId:
-        Fn::ImportValue: !Sub '${EnvironmentName}-PublicSubnetId'
-      SecurityGroupIds:
+      Name: !Sub '${EnvironmentName}-opt1-alb'
+      Scheme: internet-facing
+      Type: application
+      Subnets:
+        - Fn::ImportValue: !Sub '${EnvironmentName}-PublicSubnetId'
+        - Fn::ImportValue: !Sub '${EnvironmentName}-PublicSubnet2Id'
+      SecurityGroups:
         - Fn::ImportValue: !Sub '${EnvironmentName}-WebSecurityGroupId'
-      MetadataOptions:
-        HttpTokens: required
-        HttpPutResponseHopLimit: 1
-        HttpEndpoint: enabled
-      BlockDeviceMappings:
-        - DeviceName: /dev/xvda
-          Ebs:
-            VolumeSize: !Ref VolumeSize
-            VolumeType: gp3
-            Encrypted: true
-            DeleteOnTermination: true
-      UserData:
-        Fn::Base64: !Sub |
-          #!/bin/bash
-          set -e
-          dnf update -y
-          dnf install -y docker aws-cli
-          systemctl enable docker
-          systemctl start docker
-          usermod -aG docker ec2-user
-
-          AWS_REGION="${AWS::Region}"
-          ACCOUNT_ID="${AWS::AccountId}"
-          IMAGE_URI="${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${EnvironmentName}-option-1-web-app:${ImageTag}"
-
-          echo "Logging into Amazon ECR..."
-          aws ecr get-login-password --region "${AWS::Region}" | docker login --username AWS --password-stdin "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com" || true
-
-          echo "Pulling Docker image: $IMAGE_URI"
-          docker pull "$IMAGE_URI" || true
-
-          cat << 'SVC' > /etc/systemd/system/react-webapp.service
-          [Unit]
-          Description=Dockerized React Web App
-          After=docker.service
-          Requires=docker.service
-
-          [Service]
-          TimeoutStartSec=0
-          Restart=always
-          ExecStartPre=-/usr/bin/docker stop react-webapp
-          ExecStartPre=-/usr/bin/docker rm react-webapp
-          ExecStart=/usr/bin/docker run --name react-webapp -p 80:80 -e APP_ENV=${EnvironmentName} -e PORT=80 ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${EnvironmentName}-option-1-web-app:${ImageTag}
-          ExecStop=/usr/bin/docker stop react-webapp
-
-          [Install]
-          WantedBy=multi-user.target
-          SVC
-
-          systemctl daemon-reload
-          systemctl enable react-webapp
-          systemctl start react-webapp || true
       Tags:
         - Key: Name
-          Value: !Sub '${EnvironmentName}-web-server'
+          Value: !Sub '${EnvironmentName}-opt1-alb'
         - Key: Environment
           Value: !Ref EnvironmentName
 
-  WebServerEIP:
-    Type: AWS::EC2::EIP
+  ALBTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
-      Domain: vpc
-      InstanceId: !Ref WebServerInstance
+      Name: !Sub '${EnvironmentName}-opt1-tg'
+      Port: 80
+      Protocol: HTTP
+      VpcId:
+        Fn::ImportValue: !Sub '${EnvironmentName}-VpcId'
+      TargetType: instance
+      HealthCheckPath: /login
+      HealthCheckPort: '80'
+      HealthCheckProtocol: HTTP
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 3
+      Matcher:
+        HttpCode: 200-399
       Tags:
         - Key: Name
-          Value: !Sub '${EnvironmentName}-web-eip'
+          Value: !Sub '${EnvironmentName}-opt1-tg'
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  ALBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref ApplicationLoadBalancer
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref ALBTargetGroup
+
+  ALBHttpsListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Condition: HasCertificateArn
+    Properties:
+      LoadBalancerArn: !Ref ApplicationLoadBalancer
+      Port: 443
+      Protocol: HTTPS
+      SslPolicy: ELBSecurityPolicy-TLS13-1-2-2021-06
+      Certificates:
+        - CertificateArn: !Ref CertificateArn
+      DefaultActions:
+        !If
+          - HasCloudflareSecret
+          - - Type: fixed-response
+              FixedResponseConfig:
+                ContentType: text/plain
+                MessageBody: 'Direct origin access forbidden. Requests must route via Cloudflare proxy.'
+                StatusCode: '403'
+          - - Type: forward
+              TargetGroupArn: !Ref ALBTargetGroup
+
+  ALBCloudflareRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Condition: HasCloudflareSecret
+    Properties:
+      ListenerArn: !Ref ALBHttpsListener
+      Priority: 1
+      Conditions:
+        - Field: http-header
+          HttpHeaderConfig:
+            HttpHeaderName: X-Origin-Secret
+            Values:
+              - !Ref CloudflareOriginSecret
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref ALBTargetGroup
+
+  WebLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: !Sub '${EnvironmentName}-opt1-web-lt'
+      LaunchTemplateData:
+        InstanceType: !Ref InstanceType
+        ImageId: !Ref LatestAmiId
+        IamInstanceProfile:
+          Name:
+            Fn::ImportValue: !Sub '${EnvironmentName}-EC2InstanceProfileName'
+        SecurityGroupIds:
+          - Fn::ImportValue: !Sub '${EnvironmentName}-WebSecurityGroupId'
+        MetadataOptions:
+          HttpTokens: required
+          HttpPutResponseHopLimit: 1
+          HttpEndpoint: enabled
+        BlockDeviceMappings:
+          - DeviceName: /dev/xvda
+            Ebs:
+              VolumeSize: !Ref VolumeSize
+              VolumeType: gp3
+              Encrypted: true
+              DeleteOnTermination: true
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            set -e
+            dnf update -y
+            dnf install -y docker aws-cli
+            systemctl enable docker
+            systemctl start docker
+            usermod -aG docker ec2-user
+
+            AWS_REGION="${AWS::Region}"
+            ACCOUNT_ID="${AWS::AccountId}"
+            IMAGE_URI="${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${EnvironmentName}-option-1-web-app:${ImageTag}"
+
+            echo "Logging into Amazon ECR..."
+            aws ecr get-login-password --region "${AWS::Region}" | docker login --username AWS --password-stdin "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com" || true
+
+            echo "Pulling Docker image: $IMAGE_URI"
+            docker pull "$IMAGE_URI" || true
+
+            cat << 'SVC' > /etc/systemd/system/react-webapp.service
+            [Unit]
+            Description=Dockerized React Web App
+            After=docker.service
+            Requires=docker.service
+
+            [Service]
+            TimeoutStartSec=0
+            Restart=always
+            ExecStartPre=-/usr/bin/docker stop react-webapp
+            ExecStartPre=-/usr/bin/docker rm react-webapp
+            ExecStart=/usr/bin/docker run --name react-webapp -p 80:80 -e APP_ENV=${EnvironmentName} -e PORT=80 ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${EnvironmentName}-option-1-web-app:${ImageTag}
+            ExecStop=/usr/bin/docker stop react-webapp
+
+            [Install]
+            WantedBy=multi-user.target
+            SVC
+
+            systemctl daemon-reload
+            systemctl enable react-webapp
+            systemctl start react-webapp || true
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: !Sub '${EnvironmentName}-opt1-web-asg-instance'
+              - Key: Environment
+                Value: !Ref EnvironmentName
+
+  WebAutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: !Sub '${EnvironmentName}-opt1-asg'
+      LaunchTemplate:
+        LaunchTemplateId: !Ref WebLaunchTemplate
+        Version: !GetAtt WebLaunchTemplate.LatestVersionNumber
+      MinSize: !Ref MinInstances
+      MaxSize: !Ref MaxInstances
+      DesiredCapacity: !Ref DesiredInstances
+      VPCZoneIdentifier:
+        - Fn::ImportValue: !Sub '${EnvironmentName}-PrivateSubnet1Id'
+        - Fn::ImportValue: !Sub '${EnvironmentName}-PrivateSubnet2Id'
+      TargetGroupARNs:
+        - !Ref ALBTargetGroup
+      HealthCheckType: ELB
+      HealthCheckGracePeriod: 300
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-opt1-web-server'
+          PropagateAtLaunch: true
+        - Key: Environment
+          Value: !Ref EnvironmentName
+          PropagateAtLaunch: true
+
+  WebCPUScalingPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AutoScalingGroupName: !Ref WebAutoScalingGroup
+      PolicyType: TargetTrackingScaling
+      TargetTrackingConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ASGAverageCPUUtilization
+        TargetValue: 70.0
+
+  CloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Comment: !Sub '${EnvironmentName} Option 1 Web Distribution'
+        Enabled: true
+        HttpVersion: http2and3
+        PriceClass: PriceClass_All
+        Origins:
+          - Id: ALBOrigin
+            DomainName: !GetAtt ApplicationLoadBalancer.DNSName
+            CustomOriginConfig:
+              HTTPPort: 80
+              HTTPSPort: 443
+              OriginProtocolPolicy: http-only
+              OriginKeepaliveTimeout: 5
+              OriginReadTimeout: 30
+        DefaultCacheBehavior:
+          TargetOriginId: ALBOrigin
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+            - PUT
+            - POST
+            - PATCH
+            - DELETE
+          CachedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+          CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+          OriginRequestPolicyId: 216adef6-5c1d-47e7-81dd-c14a2a485ea9
+          Compress: true
+        CacheBehaviors:
+          - PathPattern: '/_next/static/*'
+            TargetOriginId: ALBOrigin
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods:
+              - GET
+              - HEAD
+            CachedMethods:
+              - GET
+              - HEAD
+            CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
+            Compress: true
+          - PathPattern: '/static/*'
+            TargetOriginId: ALBOrigin
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods:
+              - GET
+              - HEAD
+            CachedMethods:
+              - GET
+              - HEAD
+            CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
+            Compress: true
+        ViewerCertificate:
+          CloudFrontDefaultCertificate: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-opt1-cf'
         - Key: Environment
           Value: !Ref EnvironmentName
 
 Outputs:
   WebsiteURL:
-    Description: Website URL
-    Value: !Sub 'http://${WebServerEIP.PublicIp}'
-  PublicIP:
-    Description: Elastic IP
-    Value: !Ref WebServerEIP
+    Description: Website URL via CloudFront CDN
+    Value: !Sub 'https://${CloudFrontDistribution.DomainName}'
+  CloudFrontDomainName:
+    Description: CloudFront Distribution Domain Name
+    Value: !GetAtt CloudFrontDistribution.DomainName
+  CloudFrontDistributionId:
+    Description: CloudFront Distribution ID
+    Value: !Ref CloudFrontDistribution
+  LoadBalancerDNS:
+    Description: Application Load Balancer DNS Name
+    Value: !GetAtt ApplicationLoadBalancer.DNSName
+  LoadBalancerURL:
+    Description: Direct Application Load Balancer URL
+    Value: !Sub 'http://${ApplicationLoadBalancer.DNSName}'
   CustomDomainURL:
     Description: Custom Domain Website URL (png261.dev)
     Value: !Sub 'https://${SubdomainName}'
@@ -133,10 +355,13 @@ Outputs:
     Value: !Ref DomainName
   DnsRecordType:
     Description: DNS Record Type for Cloudflare / Route 53
-    Value: 'A'
+    Value: 'CNAME'
   DnsRecordName:
     Description: DNS Record Name
     Value: !Ref SubdomainName
   DnsRecordValue:
-    Description: DNS Record Value (IPv4 Target)
-    Value: !Ref WebServerEIP
+    Description: DNS Record Value (CloudFront Distribution Target)
+    Value: !GetAtt CloudFrontDistribution.DomainName
+  CloudflareProxyGuide:
+    Description: Cloudflare Setup Instructions
+    Value: !Sub 'Add CNAME in Cloudflare: ${SubdomainName} -> ${CloudFrontDistribution.DomainName} (or ALB DNS ${ApplicationLoadBalancer.DNSName}) with SSL/TLS Full.'
