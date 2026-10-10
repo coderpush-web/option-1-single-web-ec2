@@ -93,36 +93,6 @@ Resources:
         - Key: Environment
           Value: !Ref EnvironmentName
 
-  AppECRRepository:
-    Type: AWS::ECR::Repository
-    Properties:
-      RepositoryName: !Sub '${EnvironmentName}-option-1-web-app'
-      ImageScanningConfiguration:
-        ScanOnPush: true
-      LifecyclePolicy:
-        LifecyclePolicyText: |
-          {
-            "rules": [
-              {
-                "rulePriority": 1,
-                "description": "Keep last 5 images",
-                "selection": {
-                  "tagStatus": "any",
-                  "countType": "imageCountMoreThan",
-                  "countNumber": 5
-                },
-                "action": {
-                  "type": "expire"
-                }
-              }
-            ]
-          }
-      Tags:
-        - Key: Name
-          Value: !Sub '${EnvironmentName}-option-1-ecr'
-        - Key: Environment
-          Value: !Ref EnvironmentName
-
   ApplicationLoadBalancer:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
@@ -439,7 +409,7 @@ Outputs:
     Value: !GetAtt ApplicationLoadBalancer.DNSName
   ECRRepositoryUri:
     Description: ECR Repository URI
-    Value: !GetAtt AppECRRepository.RepositoryUri
+    Value: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${EnvironmentName}-option-1-web-app'
   LoadBalancerURL:
     Description: Direct Application Load Balancer URL
     Value: !Sub 'http://${ApplicationLoadBalancer.DNSName}'
