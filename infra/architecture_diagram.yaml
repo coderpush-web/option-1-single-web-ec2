@@ -63,16 +63,11 @@ Diagram:
       Title: "Public Subnets (AZ1 & AZ2)"
       Children:
         - ALB
-        - NATGW
 
     ALB:
       Type: AWS::ElasticLoadBalancingV2::LoadBalancer
       Preset: "Application Load Balancer"
       Title: "Application Load Balancer"
-
-    NATGW:
-      Type: AWS::EC2::NatGateway
-      Title: "NAT Gateway (Egress)"
 
     PrivateSubnets:
       Type: AWS::EC2::Subnet
@@ -80,11 +75,16 @@ Diagram:
       Title: "Private Subnets (AZ1 & AZ2)"
       Children:
         - WebASG
+        - VPCEndpoints
 
     WebASG:
       Type: AWS::AutoScaling::AutoScalingGroup
       Preset: "AWS::AutoScaling::AutoScalingGroup"
       Title: "Web Auto Scaling Group\n(Docker on EC2)"
+
+    VPCEndpoints:
+      Type: AWS::EC2::VPCEndpoint
+      Title: "AWS PrivateLink\n(ECR & S3 Endpoints)"
 
   Links:
     - Source: User
@@ -136,12 +136,15 @@ Diagram:
           Title: "HTTP:80"
     - Source: WebASG
       SourcePosition: E
-      Target: NATGW
-      TargetPosition: N
+      Target: VPCEndpoints
+      TargetPosition: W
       TargetArrowHead:
         Type: Open
       Type: orthogonal
-    - Source: NATGW
+      Labels:
+        SourceRight:
+          Title: "PrivateLink"
+    - Source: VPCEndpoints
       SourcePosition: E
       Target: ECR
       TargetPosition: W
