@@ -96,7 +96,7 @@ flowchart TD
 
 | Development Environment (`opt1-dev.png261.dev`) | Production Environment (`opt1.png261.dev`) |
 | :---: | :---: |
-| ![Development Environment](screenshots/dev_screenshot.png) | ![Production Environment](screenshots/prod_screenshot.png) |
+| ![Development Environment](docs/screenshots/dev_screenshot.png) | ![Production Environment](docs/screenshots/prod_screenshot.png) |
 
 > 🚀 **Deployment Notes:**
 > - **Development (`opt1-dev.png261.dev`):** Runs with debug configurations, Auto Scaling Min 1 - Max 2 instances.
