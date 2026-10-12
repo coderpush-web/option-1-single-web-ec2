@@ -1,6 +1,6 @@
 # Option 1: Auto Scaling Web Application on EC2 with CloudFront Caching
 
-Independent infrastructure and application source code for **Option 1: Auto Scaling Web Application on EC2 (ALB + ASG in Private Subnets) with Amazon CloudFront Edge Caching**.
+Independent infrastructure and application source code for **Option 1: Auto Scaling Web Application on EC2 (ALB + ASG in Private Subnets) with Amazon CloudFront Edge Caching and AWS NAT Gateway**.
 
 ## 1. Architecture Overview
 ![Architecture](infra/architecture_diagram.png)
@@ -8,6 +8,7 @@ Independent infrastructure and application source code for **Option 1: Auto Scal
 ### Key Architectural Highlights:
 - **CloudFront CDN Edge Caching:** Optimized caching for static assets (`/_next/static/*`, images), offloading 80–90% of requests from origin servers, lowering TTFB, and accelerating global page load times.
 - **Application Load Balancer (ALB):** Resides in Multi-AZ Public Subnets, distributing incoming HTTP/HTTPS requests with lightweight health checking via `/api/health`.
+- **AWS NAT Gateway:** Deployed in the Public Subnet with an Elastic IP, enabling EC2 instances in Private Subnets to pull container images from Amazon ECR, send logs, and fetch OS security patches securely without inbound internet exposure.
 - **Auto Scaling Group (ASG):** Securely deployed in **Private Subnets (AZ1 & AZ2)**, automatically scaling EC2 instance counts based on CPU utilization (70% target tracking).
 - **Zero-Downtime Rolling Update:** Integrated `aws autoscaling start-instance-refresh` in CI/CD rolls out updated container versions sequentially without service interruption.
 - **Automated Monitoring & Alerts:** CloudWatch Alarms (ALB 5XX and ASG CPU > 85%) connected to SNS Topic for immediate email notification; CloudWatch LogGroups auto-expire logs after 14 days (Dev) / 30 days (Prod) for cost optimization.
@@ -20,22 +21,21 @@ Independent infrastructure and application source code for **Option 1: Auto Scal
 ### A. Component Cost Breakdown (Infracost CLI Verified)
 | CloudFormation Module / Component | AWS Resource Type | Monthly Cost (USD) | Notes |
 | :--- | :--- | :--- | :--- |
+| **AWS NAT Gateway** | `AWS::EC2::NatGateway` | **$32.85** | Managed NAT Gateway in Public Subnet (0.0.0.0/0 egress) |
 | **Application Load Balancer (ALB)** | `AWS::ElasticLoadBalancingV2::LoadBalancer` | **$16.43** | Fixed balancer charge spanning Multi-AZ |
 | **Web Compute (Auto Scaling Group)** | `AWS::AutoScaling::AutoScalingGroup` (`t3.micro`) | **$9.49** | Baseline 1x instance (730 hrs/month) |
 | **Secrets & Monitoring** | `SecretsManager`, `CloudWatch`, `SNS` | **$0.30** | Auth token secret + operational alarms |
-| **Subtotal (Core Web Application Tier)** | `infra/modules/app.yaml` | **$26.22 / mo** | ~664,000 VND / month |
-| **Private VPC Interface Endpoints (Optional)** | `AWS::EC2::VPCEndpoint` (7 endpoints) | **$102.20** | SSM, ECR, CloudWatch Logs in Private Subnets |
-| **Total (Full Enterprise Isolated Architecture)** | `infra/modules/` | **$128.42 / mo** | ~3,250,000 VND / month |
+| **Total Monthly Cost** | `infra/modules/` | **$59.07 / mo** | ~1,495,000 VND / month |
 
-### B. Cost by Purchasing Option & Architecture Mode
-| Purchasing Model / Mode | Web Compute (`t3.micro`) | ALB & Supporting | Total (Lean Mode)* | Total (Full Isolated) | Approx. Local Currency (Lean) |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **On-Demand (Default)** | $9.49 | $16.73 | **$26.22 / mo** | **$128.42 / mo** | ~664,000 VND |
-| **1-Year Savings Plan** | $5.98 | $16.73 | **$22.71 / mo** *(13% off)* | **$124.91 / mo** | ~575,000 VND |
-| **3-Year Savings Plan** | $3.79 | $16.73 | **$20.52 / mo** *(22% off)* | **$122.72 / mo** | ~520,000 VND |
-| **Spot Instance (Dev/Test)** | $2.84 | $16.73 | **$19.57 / mo** *(25% off)* | **$121.77 / mo** | ~496,000 VND |
+*(Tiết kiệm **$69.35 / tháng** so với mô hình cũ sử dụng 7 VPC Interface Endpoints $102.20/tháng).*
 
-*\*Lean Mode: Compute + ALB + CloudFront routing without dedicated VPC Interface Endpoints ($102.20/mo).*
+### B. Cost by Purchasing Option & Commitment
+| Purchasing Model | Web Compute (`t3.micro`) | NAT Gateway & ALB | Total Monthly Cost | Approx. Local Currency (VND) |
+| :--- | :--- | :--- | :--- | :--- |
+| **On-Demand (Default)** | $9.49 | $49.58 | **$59.07 / mo** | ~1,495,000 VND |
+| **1-Year Savings Plan** | $5.98 | $49.58 | **$55.56 / mo** *(6% savings)* | ~1,405,000 VND |
+| **3-Year Savings Plan** | $3.79 | $49.58 | **$53.37 / mo** *(10% savings)* | ~1,350,000 VND |
+| **Spot Instance (Dev/Test)** | $2.84 | $49.58 | **$52.42 / mo** *(11% savings)* | ~1,326,000 VND |
 
 ## 3. Disaster Recovery & Recovery Time (MTTR)
 
