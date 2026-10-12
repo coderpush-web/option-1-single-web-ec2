@@ -39,50 +39,6 @@ Independent infrastructure and application source code for **Option 1: Auto Scal
 ## 3. Architecture Overview
 ![Architecture](infra/architecture_diagram.png)
 
-```mermaid
-flowchart TD
-    subgraph Client ["Client Access"]
-        Users["Users / Browsers"]
-        Domain["Custom Domain (opt1.png261.dev)"]
-    end
-
-    subgraph Edge ["Edge Layer"]
-        CF["Amazon CloudFront CDN (Cache Static /_next/*)"]
-    end
-
-    subgraph AWS_VPC ["AWS VPC (ap-southeast-1)"]
-        subgraph Public_Subnets ["Public Subnets (AZ1 & AZ2)"]
-            ALB["Application Load Balancer (ALB)"]
-            TG["Target Group (Healthcheck: /api/health)"]
-        end
-
-        subgraph Private_Subnets ["Private Subnets (AZ1 & AZ2)"]
-            subgraph ASG ["Auto Scaling Group (Min: 1-2, Max: 4-6)"]
-                EC2_1["EC2 Web Instance 1<br/>Docker Container (Port 80)"]
-                EC2_2["EC2 Web Instance 2<br/>Docker Container (Port 80)"]
-            end
-        end
-    end
-
-    subgraph Management ["Observability & Deployment"]
-        CW_Logs["CloudWatch LogGroup<br/>(14d Dev / 30d Prod)"]
-        CW_Alarms["CloudWatch Alarms<br/>(ALB 5XX + Web CPU > 85%)"]
-        SNS["SNS OpsAlertTopic"]
-        Email["Ops Alert Email"]
-        ECR["Amazon ECR Repository"]
-        CI_CD["GitHub Actions CI/CD<br/>(Zero-Downtime Instance Refresh)"]
-    end
-
-    Users --> Domain --> CF
-    CF -->|Dynamic requests| ALB
-    ALB --> TG --> ASG
-    ASG -.->|Logs| CW_Logs
-    ASG -.->|Metrics| CW_Alarms
-    ALB -.->|Metrics| CW_Alarms
-    CW_Alarms --> SNS --> Email
-    CI_CD -->|Push Docker Image| ECR
-    CI_CD -->|Trigger Instance Refresh| ASG
-```
 
 ### Key Architectural Highlights:
 - **CloudFront CDN Edge Caching:** Optimized caching for static assets (`/_next/static/*`, images), offloading 80–90% of requests from origin servers, lowering TTFB, and accelerating global page load times.
