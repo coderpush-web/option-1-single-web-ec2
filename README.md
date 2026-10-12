@@ -15,18 +15,27 @@ Independent infrastructure and application source code for **Option 1: Auto Scal
 
 ## 2. Cost Analysis
 
-### A. Cost by Purchasing Option (Singapore Region: `ap-southeast-1`)
-| Purchasing Model | EC2 Compute | Supporting Components (ALB + CloudFront + EBS) | Total Monthly Cost | Approx. Local Currency (VND) |
-| :--- | :--- | :--- | :--- | :--- |
-| **On-Demand (Default)** | $15.18 / mo | $18.50 / mo | **$33.68 / mo** | ~850,000 VND |
-| **1-Year Savings Plan (1-Yr Commitment)** | $9.56 / mo | $18.50 / mo | **$28.06 / mo** *(17% savings)* | ~708,000 VND |
-| **3-Year Savings Plan (3-Yr Commitment)** | $6.06 / mo | $18.50 / mo | **$24.56 / mo** *(27% savings)* | ~620,000 VND |
-| **Spot Instance (Dev/Test Environments)** | $4.53 / mo | $18.50 / mo | **$23.03 / mo** *(32% savings)* | ~581,000 VND |
+> 💡 **Verified via Infracost CLI:** Cost calculations derived directly from CloudFormation templates using `infracost scan ./infra/modules`.
 
-### B. Cross-Region Cost Comparison
-- **Singapore (`ap-southeast-1`):** $33.68 / month (Lowest latency to Southeast Asia & Vietnam: ~30ms).
-- **US East (`us-east-1`):** $29.50 / month (Lower compute and ALB pricing, global edge delivery).
-- **Tokyo (`ap-northeast-1`):** $38.20 / month (Higher compute pricing).
+### A. Component Cost Breakdown (Infracost CLI Verified)
+| CloudFormation Module / Component | AWS Resource Type | Monthly Cost (USD) | Notes |
+| :--- | :--- | :--- | :--- |
+| **Application Load Balancer (ALB)** | `AWS::ElasticLoadBalancingV2::LoadBalancer` | **$16.43** | Fixed balancer charge spanning Multi-AZ |
+| **Web Compute (Auto Scaling Group)** | `AWS::AutoScaling::AutoScalingGroup` (`t3.micro`) | **$9.49** | Baseline 1x instance (730 hrs/month) |
+| **Secrets & Monitoring** | `SecretsManager`, `CloudWatch`, `SNS` | **$0.30** | Auth token secret + operational alarms |
+| **Subtotal (Core Web Application Tier)** | `infra/modules/app.yaml` | **$26.22 / mo** | ~664,000 VND / month |
+| **Private VPC Interface Endpoints (Optional)** | `AWS::EC2::VPCEndpoint` (7 endpoints) | **$102.20** | SSM, ECR, CloudWatch Logs in Private Subnets |
+| **Total (Full Enterprise Isolated Architecture)** | `infra/modules/` | **$128.42 / mo** | ~3,250,000 VND / month |
+
+### B. Cost by Purchasing Option & Architecture Mode
+| Purchasing Model / Mode | Web Compute (`t3.micro`) | ALB & Supporting | Total (Lean Mode)* | Total (Full Isolated) | Approx. Local Currency (Lean) |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **On-Demand (Default)** | $9.49 | $16.73 | **$26.22 / mo** | **$128.42 / mo** | ~664,000 VND |
+| **1-Year Savings Plan** | $5.98 | $16.73 | **$22.71 / mo** *(13% off)* | **$124.91 / mo** | ~575,000 VND |
+| **3-Year Savings Plan** | $3.79 | $16.73 | **$20.52 / mo** *(22% off)* | **$122.72 / mo** | ~520,000 VND |
+| **Spot Instance (Dev/Test)** | $2.84 | $16.73 | **$19.57 / mo** *(25% off)* | **$121.77 / mo** | ~496,000 VND |
+
+*\*Lean Mode: Compute + ALB + CloudFront routing without dedicated VPC Interface Endpoints ($102.20/mo).*
 
 ## 3. Disaster Recovery & Recovery Time (MTTR)
 
