@@ -13,16 +13,17 @@ option-1-single-web-ec2/
 ├── app/                          # Next.js 14 application codebase
 │   ├── app/                      # Next.js App Router (pages & API routes)
 │   ├── Dockerfile                # Multi-stage production container build
-│   └── package.json              # Application dependencies & build scripts
+│   ├── package.json              # Application dependencies & build scripts
+│   └── test/test_api.js          # Automated Node.js API and healthcheck test suite
 ├── infra/
 │   ├── environments/             # Environment parameters (dev.json, prod.json)
 │   └── modules/                  # CloudFormation templates
 │       ├── vpc-subnets.yaml      # Multi-AZ VPC, subnets, and VPC endpoints
 │       ├── security-groups.yaml  # ALB SG and Web SG definitions
 │       └── app.yaml              # ALB, CloudFront, ASG, Launch Template
+├── .devsecops/                   # DevSecOps configs: checkov, ferret-scan, licensecheck
 ├── .github/workflows/            # CI/CD workflows (OIDC deployment, ECR build, lint)
-├── .husky/ & .githooks/          # Quality gates: commit-msg, pre-commit, pre-push
-├── test/test_api.js              # Automated Node.js API and healthcheck test suite
+├── .githooks/                    # Quality gates: commit-msg, pre-commit, pre-push
 └── AGENTS.md                     # Agent guide for Option 1
 ```
 
@@ -31,14 +32,14 @@ option-1-single-web-ec2/
 ## 3. Essential Commands
 
 ### Build & Run
-- **Install Dependencies:** `npm install` (root) or `cd app && npm install`
+- **Install Dependencies:** `cd app && npm install`
 - **Build Container:** `docker build -t nextjs-app:latest app/`
 - **Run Application Locally:** `cd app && npm run dev`
 
 ### Validation & Quality Gates
 - **Run Automated Tests:**
   ```bash
-  node test/test_api.js
+  node app/test/test_api.js
   ```
 - **Lint CloudFormation Templates:**
   ```bash
@@ -46,7 +47,7 @@ option-1-single-web-ec2/
   ```
 - **Scan IaC Security (Checkov):**
   ```bash
-  checkov --config-file .checkov.yaml
+  checkov --config-file .devsecops/checkov.yaml
   ```
 - **Scan for Secrets (GitLeaks):**
   ```bash
@@ -54,7 +55,7 @@ option-1-single-web-ec2/
   ```
 - **Run All Pre-Commit Checks:**
   ```bash
-  ./.husky/pre-commit
+  ./.githooks/pre-commit
   ```
 
 ---
@@ -99,7 +100,7 @@ option-1-single-web-ec2/
 
 ### ✅ Always Do
 - Follow Conventional Commits format (`type(scope): message`).
-- Verify that `test/test_api.js`, `cfn-lint`, `checkov`, and `gitleaks` pass before pushing.
+- Verify that `app/test/test_api.js`, `cfn-lint`, `checkov`, and `gitleaks` pass before pushing.
 
 ---
 
@@ -113,8 +114,8 @@ option-1-single-web-ec2/
 ## 7. Definition of Done (Verification Checklist)
 Before completing any task in this repository, verify:
 1. [ ] `cfn-lint infra/modules/*.yaml` exits with code 0.
-2. [ ] `checkov --config-file .checkov.yaml` runs cleanly.
+2. [ ] `checkov --config-file .devsecops/checkov.yaml` runs cleanly.
 3. [ ] `gitleaks protect --staged --verbose` finds 0 secrets.
-4. [ ] `node test/test_api.js` passes all tests.
+4. [ ] `node app/test/test_api.js` passes all tests.
 5. [ ] Workflows contain zero static AWS keys (`! grep -rn --exclude="ci-infra.yml" "AWS_ACCESS_KEY_ID" .github/workflows/`).
 6. [ ] Commit message conforms to Conventional Commits hook.
